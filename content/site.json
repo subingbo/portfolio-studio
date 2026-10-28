@@ -1,0 +1,52 @@
+{
+  "profile": {
+    "name": "Your Name",
+    "initial": "Y",
+    "avatar": "",
+    "eyebrow": "FULL STACK · ENGINEERING NOTES",
+    "slogan": "把想法做成可用的产品，也把过程讲清楚。",
+    "intro": "这里是 Your Name 的个人作品集模板。替换 content/site.json 中的资料、项目与媒体，就能生成自己的网站。",
+    "tags": ["后端工程", "前端开发", "数据库", "工程效率"],
+    "email": "you@example.com",
+    "github": "https://github.com/your-name"
+  },
+  "integrations": {
+    "postsApiBase": ""
+  },
+  "about": {
+    "intro": "示例介绍：说明你的方向、关注点与代表工作。可以写业务交付、性能优化或工程实践。",
+    "education": [
+      {
+        "school": "示例大学",
+        "period": "2020—2024",
+        "detail": "计算机科学与技术 · 本科"
+      }
+    ],
+    "internships": [
+      {
+        "company": "示例公司",
+        "period": "2024—至今",
+        "role": "软件工程师 · 示例业务平台",
+        "bullets": [
+          "负责示例服务的接口设计与性能优化，减少重复查询与无效请求。",
+          "为关键流程补充自动化测试，降低回归风险。"
+        ]
+      }
+    ],
+    "capabilities": [
+      {
+        "title": "后端与数据库",
+        "description": "API 设计、关系型数据库、缓存与并发控制；关注一致性与可观测性。"
+      },
+      {
+        "title": "前端与交互",
+        "description": "语义化 HTML、响应式布局与可访问性；保持界面简洁、加载轻量。"
+      },
+      {
+        "title": "工程效率",
+        "description": "Git 工作流、自动化测试、构建与部署；用小工具减少重复劳动。"
+      }
+    ],
+    "contactNote": "想交流项目或合作，可以发邮件给我。"
+  }
+}

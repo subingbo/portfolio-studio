@@ -1,0 +1,13 @@
+{
+  "sitePath": "..",
+  "port": 3737,
+  "production": {
+    "url": "",
+    "expectedRemote": "https://github.com/your-name/your-site.git",
+    "branch": "main",
+    "testScript": "test",
+    "deployCheck": {
+      "enabled": false
+    }
+  }
+}

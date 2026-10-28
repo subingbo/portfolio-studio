@@ -1,0 +1,10 @@
+{
+  "name": "portfolio-site-template",
+  "private": true,
+  "type": "commonjs",
+  "description": "A static portfolio site template driven by JSON content",
+  "license": "MIT",
+  "scripts": {
+    "test": "node --test tests/*.test.js"
+  }
+}

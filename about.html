@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="light" />
+  <meta name="description" content="关于 Your Name：经历、技能与联系方式。" />
+  <title>关于 · Your Name</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="assets/styles.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="site-header__inner">
+      <a class="brand" href="index.html"><span class="brand__mark" data-brand-mark>Y</span><span class="brand__name" data-brand-name>Your Name</span></a>
+      <nav class="site-nav" aria-label="主导航">
+        <a href="index.html" data-nav="home">首页</a>
+        <a href="blog.html" data-nav="blog">文章</a>
+        <a href="projects.html" data-nav="projects">作品</a>
+        <a href="about.html" data-nav="about">关于</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="page">
+    <header class="about-hero">
+      <div class="profile-avatar-slot" data-profile-avatar aria-label="Your Name的头像">
+        <span class="profile-avatar avatar--letter" aria-hidden="true">Y</span>
+      </div>
+      <div>
+        <p class="eyebrow">ABOUT</p>
+        <h1 id="about-name">Your Name</h1>
+        <p id="about-intro">示例介绍：说明你的方向、关注点与代表工作。可以写业务交付、性能优化或工程实践。</p>
+        <div class="actions">
+          <a class="button button--primary" href="mailto:you@example.com" data-email-link data-email-label>you@example.com</a>
+          <a class="button button--ghost" href="https://github.com/your-name" target="_blank" rel="noopener noreferrer" data-github-link>GitHub ↗</a>
+        </div>
+      </div>
+    </header>
+
+    <section class="about-section">
+      <p class="section-kicker">EDUCATION</p>
+      <h2>教育经历</h2>
+      <div id="education-list">
+        <article class="experience-card">
+          <div><strong>示例大学</strong><span>2020—2024</span></div>
+          <p>计算机科学与技术 · 本科</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="about-section">
+      <p class="section-kicker">EXPERIENCE</p>
+      <h2>实习经历</h2>
+      <div id="internship-list">
+        <article class="experience-card">
+          <div><strong>示例公司</strong><span>2024—至今</span></div>
+          <p class="experience-card__role">软件工程师 · 示例业务平台</p>
+          <ul>
+            <li>负责示例服务的接口设计与性能优化，减少重复查询与无效请求。</li>
+            <li>为关键流程补充自动化测试，降低回归风险。</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section class="about-section">
+      <p class="section-kicker">CAPABILITIES</p>
+      <h2>技术能力</h2>
+      <div class="capability-grid" id="capability-grid">
+        <article><h3>后端与数据库</h3><p>API 设计、关系型数据库、缓存与并发控制；关注一致性与可观测性。</p></article>
+        <article><h3>前端与交互</h3><p>语义化 HTML、响应式布局与可访问性；保持界面简洁、加载轻量。</p></article>
+        <article><h3>工程效率</h3><p>Git 工作流、自动化测试、构建与部署；用小工具减少重复劳动。</p></article>
+      </div>
+    </section>
+
+    <section class="about-section about-cta">
+      <div><p class="section-kicker">CONTACT</p><h2>继续交流</h2></div>
+      <p id="about-contact-note">想交流项目或合作，可以发邮件给我。</p>
+      <a class="button button--primary" href="mailto:you@example.com" data-email-link>发送邮件</a>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="site-footer__inner">
+      <span>© 2026 Your Name</span>
+      <a href="mailto:you@example.com" data-email-link data-email-label>you@example.com</a>
+    </div>
+  </footer>
+
+  <script src="assets/projects.js"></script>
+  <script src="assets/app.js"></script>
+</body>
+</html>

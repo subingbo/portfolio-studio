@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="light" />
+  <meta name="description" content="Your Name 的技术文章与工程笔记。" />
+  <title>文章 · Your Name</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="assets/styles.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="site-header__inner">
+      <a class="brand" href="index.html"><span class="brand__mark" data-brand-mark>Y</span><span class="brand__name" data-brand-name>Your Name</span></a>
+      <nav class="site-nav" aria-label="主导航">
+        <a href="index.html" data-nav="home">首页</a>
+        <a href="blog.html" data-nav="blog">文章</a>
+        <a href="projects.html" data-nav="projects">作品</a>
+        <a href="about.html" data-nav="about">关于</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="page">
+    <header class="page-head">
+      <p class="eyebrow">WRITING</p>
+      <h1>文章</h1>
+      <p>工程实践与学习笔记。文章接口为可选配置，未配置时页面会显示提示。</p>
+    </header>
+
+    <div id="category-filters" class="filters" role="group" aria-label="文章分类">
+      <button type="button" class="is-active" data-category="">全部</button>
+      <button type="button" data-category="TECH">技术</button>
+      <button type="button" data-category="PROJECT">项目</button>
+      <button type="button" data-category="LIFE">生活</button>
+    </div>
+    <p id="list-status" class="status" aria-live="polite">加载中…</p>
+    <div id="post-list" class="post-list"></div>
+    <div class="actions">
+      <button id="load-more" class="button button--ghost" type="button" hidden>加载更多</button>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="site-footer__inner">
+      <span>© 2026 Your Name</span>
+      <span>内容由 <code>content/</code> JSON 驱动</span>
+    </div>
+  </footer>
+
+  <script src="assets/projects.js"></script>
+  <script src="assets/app.js"></script>
+</body>
+</html>

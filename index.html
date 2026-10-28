@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="light" />
+  <meta name="description" content="Your Name 的个人作品集：项目、工程实践与技术文章。" />
+  <title>Your Name · Portfolio</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="assets/styles.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="site-header__inner">
+      <a class="brand" href="index.html"><span class="brand__mark" data-brand-mark>Y</span><span class="brand__name" data-brand-name>Your Name</span></a>
+      <nav class="site-nav" aria-label="主导航">
+        <a href="index.html" data-nav="home">首页</a>
+        <a href="blog.html" data-nav="blog">文章</a>
+        <a href="projects.html" data-nav="projects">作品</a>
+        <a href="about.html" data-nav="about">关于</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="page">
+    <section class="hero hero--profile">
+      <div class="profile-avatar-slot" data-profile-avatar aria-label="Your Name的头像">
+        <span class="profile-avatar avatar--letter" aria-hidden="true">Y</span>
+      </div>
+      <div>
+        <p class="eyebrow" id="hero-eyebrow">FULL STACK · ENGINEERING NOTES</p>
+        <h1 id="hero-slogan">把想法做成可用的产品，也把过程讲清楚。</h1>
+        <p class="hero__lead" id="hero-intro">这里是 Your Name 的个人作品集模板。替换 content/site.json 中的资料、项目与媒体，就能生成自己的网站。</p>
+        <ul class="chip-list hero__meta" id="hero-tags" aria-label="技术方向">
+          <li class="chip">后端工程</li>
+          <li class="chip">前端开发</li>
+          <li class="chip">数据库</li>
+          <li class="chip">工程效率</li>
+        </ul>
+        <div class="actions">
+          <a class="button button--primary" href="projects.html">查看作品</a>
+          <a class="button button--ghost" href="mailto:you@example.com" data-email-link>联系我</a>
+          <a class="button button--ghost" href="https://github.com/your-name" target="_blank" rel="noopener noreferrer" data-github-link>GitHub ↗</a>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-head">
+        <div><p class="section-kicker">SELECTED WORK</p><h2>精选作品</h2></div>
+        <a href="projects.html">全部作品 →</a>
+      </div>
+      <div id="featured-projects" class="project-grid"><p class="empty">正在整理作品…</p></div>
+    </section>
+
+    <section>
+      <div class="section-head">
+        <div><p class="section-kicker">WRITING</p><h2>最新文章</h2></div>
+        <a href="blog.html">全部文章 →</a>
+      </div>
+      <div id="latest" class="card-grid"><p class="empty">正在读取文章…</p></div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="site-footer__inner">
+      <span>© 2026 Your Name</span>
+      <span>内容由 <code>content/</code> JSON 驱动</span>
+    </div>
+  </footer>
+
+  <script src="assets/projects.js"></script>
+  <script src="assets/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="light" />
+  <title>Portfolio Studio · 内容工作台</title>
+  <link rel="stylesheet" href="studio.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand__mark" id="brand-mark">P</span>
+      <div>
+        <strong>内容工作台</strong>
+        <span id="site-path" class="brand__path">正在连接…</span>
+      </div>
+    </div>
+    <nav class="tabs" id="tabs" aria-label="工作台导航">
+      <button type="button" data-view="home" class="is-active">首页资料</button>
+      <button type="button" data-view="about">关于页</button>
+      <button type="button" data-view="projects">作品</button>
+      <button type="button" data-view="media">素材库</button>
+      <button type="button" data-view="publish">发布</button>
+    </nav>
+    <div class="topbar__status">
+      <button type="button" id="help-button" class="btn btn--small btn--ghost">使用说明</button>
+      <span id="dirty-pill" class="pill pill--warn" hidden>有未保存修改</span>
+      <span id="session-pill" class="pill pill--muted">连接中…</span>
+    </div>
+  </header>
+
+  <main class="workspace" id="workspace">
+    <section class="editor" id="editor" aria-live="polite">
+      <p class="empty-state">正在读取站点内容…</p>
+    </section>
+    <aside class="preview" id="preview-panel">
+      <div class="preview__head">
+        <span>实时预览 · 已保存的草稿</span>
+        <button type="button" class="btn btn--small btn--ghost" id="refresh-preview">刷新预览</button>
+      </div>
+      <iframe id="preview-frame" title="站点预览" src="about:blank"></iframe>
+      <p class="preview__note">预览读取 content/ 中已保存的草稿。文章、评论等外部内容接口在本地预览中可能不可用，属正常现象。</p>
+    </aside>
+  </main>
+
+  <div id="toast" class="toast" role="status" hidden></div>
+
+  <div id="help-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="help-title" hidden>
+    <div class="modal__backdrop" data-close-help></div>
+    <div class="modal__panel">
+      <div class="modal__head">
+        <h2 id="help-title">使用说明</h2>
+        <button type="button" class="btn btn--small btn--ghost" data-close-help>关闭</button>
+      </div>
+      <div class="modal__body">
+        <p>这个工作台只在本机运行，用来编辑静态作品集网站的草稿并发布。记住一条主线：<strong>保存草稿只改本地文件，发布才会上线。</strong></p>
+
+        <h3>五步上手</h3>
+        <ol>
+          <li>顶部选择要改的页面：<strong>首页资料 / 关于页 / 作品</strong>。</li>
+          <li>在左侧表单里修改内容，改完点页面底部的<strong>“保存草稿”</strong>。</li>
+          <li>右侧预览会显示已保存的草稿；点“刷新预览”可重新加载。</li>
+          <li>全部改完后，打开<strong>“发布”</strong>页，先点“运行校验”。</li>
+          <li>校验通过后点<strong>“发布到正式站”</strong>，等待七个步骤全部完成（耗时取决于测试与你的托管平台）。</li>
+        </ol>
+
+        <h3>头像</h3>
+        <ul>
+          <li>在“首页资料”顶部的头像卡片上传：自动居中裁成 512×512 WebP，写入 <code>media/profile/avatar.webp</code> 和 <code>content/site.json</code>。</li>
+          <li>没有本地头像时，网站显示姓名首字；上传后要发布才会在正式站生效。</li>
+        </ul>
+
+        <h3>作品与媒体</h3>
+        <ul>
+          <li>左侧列表选项目或“新建项目”；拖动项目可调整首页和作品页顺序。</li>
+          <li><strong>先“保存草稿”，再上传媒体</strong>：保存后媒体区才能拖入文件。</li>
+          <li>图片支持 JPG / PNG / WebP，自动转 WebP（≤2 MiB）；视频支持 MP4 / MOV / WebM，自动压成 MP4（≤1080p、<strong>≤12 秒</strong>、≤18 MiB）并生成封面。</li>
+          <li>每张画面都要填<strong>替代文本</strong>（发布校验会检查）；拖动画面上方卡片可调整顺序；“设为封面”决定列表卡片和详情页大图。</li>
+          <li>“移除引用”只从页面移除，文件仍留在素材库；真正删除到“素材库 → 扫描未使用素材”。</li>
+        </ul>
+
+        <h3>发布做了什么</h3>
+        <ul>
+          <li>校验内容与媒体 → 运行站点测试 → 检查 Git 分支与远程 → 只暂存 <code>content/</code> 与 <code>media/</code> → 提交 → 推送 → 等待部署生效（可在配置中关闭部署确认）。</li>
+          <li>暂存区有其他文件、本地落后远程、测试失败时会停下并提示，不会自动覆盖。</li>
+          <li>项目 slug 首次发布后会锁定，避免详情页链接失效。</li>
+        </ul>
+
+        <h3>常见问题</h3>
+        <ul>
+          <li>预览里文章、评论加载失败可能是外部内容接口未配置或不允许本地域名访问，属正常现象。</li>
+          <li>页面打不开时确认工作台服务还在运行；关闭后在 <code>studio</code> 目录执行 <code>npm start</code>，端口以启动日志为准（默认 3737）。</li>
+          <li>视频超过 12 秒会拒绝上传，请先裁剪；本机需要安装 FFmpeg（顶栏会显示是否可用）。</li>
+          <li>草稿状态的项目会随仓库公开，但页面不展示；发布前校验会提醒。</li>
+        </ul>
+
+        <p class="tip">建议顺序：改文字 → 保存 → 上传图片/视频并填替代文本 → 保存 → 刷新预览确认 → 发布。</p>
+      </div>
+    </div>
+  </div>
+
+  <script src="studio.js"></script>
+</body>
+</html>

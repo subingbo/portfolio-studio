@@ -1,0 +1,18 @@
+{
+  "name": "portfolio-studio",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "description": "Local visual content studio for a static portfolio site",
+  "license": "MIT",
+  "scripts": {
+    "start": "node server/index.js",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=21"
+  },
+  "dependencies": {
+    "sharp": "^0.35.5"
+  }
+}

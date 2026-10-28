@@ -1,0 +1,75 @@
+{
+  "version": 1,
+  "projects": [
+    {
+      "slug": "sample-dashboard",
+      "status": "published",
+      "order": 1,
+      "category": "示例项目",
+      "title": "示例项目：团队任务看板",
+      "tagline": "把任务、进度与讨论放在一个清晰的界面里。",
+      "role": "独立开发 · 全栈",
+      "summary": "一个用于演示的团队任务看板：支持项目分组、任务状态与基础权限。",
+      "stack": ["Node.js", "SQLite", "React", "CSS"],
+      "proof": [
+        { "value": "3 个", "label": "核心模块" },
+        { "value": "≤ 100ms", "label": "本地查询耗时" },
+        { "value": "90%+", "label": "关键流程测试覆盖" }
+      ],
+      "overview": "示例项目用于展示作品详情页的结构：概览、工程成果、实现段落、证据与画面胶片。替换为你的项目内容即可。",
+      "sections": [
+        {
+          "title": "问题与目标",
+          "body": "团队需要一个轻量看板：快速创建任务、更新状态，并在移动端可用。"
+        },
+        {
+          "title": "实现方式",
+          "body": "后端提供 REST 接口与参数校验，前端用组件化方式渲染列表与表单；数据保存在本地数据库。"
+        },
+        {
+          "title": "验证与取舍",
+          "body": "优先保证核心流程的确定性：为状态流转与权限检查补充自动化测试，暂不引入实时协作。"
+        }
+      ],
+      "evidence": {
+        "deployment": "示例证据：静态前端与后端服务分别部署，接口通过健康检查。"
+      },
+      "sourceUrl": "",
+      "coverMediaId": null,
+      "media": []
+    },
+    {
+      "slug": "sample-notes",
+      "status": "published",
+      "order": 2,
+      "category": "示例项目",
+      "title": "示例项目：工程笔记",
+      "tagline": "把零散的排障记录整理成可检索的笔记。",
+      "role": "个人项目 · 前端与工具",
+      "summary": "一个静态笔记模板：支持分类、搜索与 Markdown 渲染，适合记录工程实践。",
+      "stack": ["HTML", "CSS", "JavaScript", "Markdown"],
+      "proof": [
+        { "value": "0 依赖", "label": "运行时" },
+        { "value": "2 列", "label": "响应式布局" },
+        { "value": "可选", "label": "外部文章接口" }
+      ],
+      "overview": "示例项目展示第二个作品卡片与详情页。没有上传媒体时，站点会自动显示带项目名称的工程占位封面。",
+      "sections": [
+        {
+          "title": "信息结构",
+          "body": "首页展示精选作品与最新文章；作品页按顺序展示卡片；详情页包含封面、工程胶片与证据。"
+        },
+        {
+          "title": "内容来源",
+          "body": "页面读取 content/ 下的 JSON；文章可在 integrations.postsApiBase 配置外部接口，留空则显示未配置提示。"
+        }
+      ],
+      "evidence": {
+        "deployment": "示例证据：纯静态文件部署，无需构建步骤。"
+      },
+      "sourceUrl": "",
+      "coverMediaId": null,
+      "media": []
+    }
+  ]
+}
