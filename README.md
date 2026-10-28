@@ -1,74 +1,74 @@
-# Portfolio Site Template
+# 作品集站点模板 · Portfolio Studio
 
-A small, dependency-free static portfolio site with a local visual content studio. Edit content in the browser, preview the real pages, then publish with one click.
+一个零构建的静态作品集网站，配一个本地可视化内容工作台。在浏览器里改内容、上传图片/视频、实时预览，然后一键校验、提交、推送发布。
 
-- **Site**: plain HTML/CSS/JS. Content lives in `content/site.json` and `content/projects.json`; media lives in `media/`.
-- **Studio**: a local-only Node app (`studio/`) that edits the JSON, processes images/videos, previews the site, and commits/pushes only `content/` and `media/`.
-- **No build step** for the site. Node.js ≥ 21 is required for the studio; FFmpeg is optional (video uploads only).
+- **站点**：纯 HTML / CSS / JS，无构建步骤。内容存放在 `content/site.json` 与 `content/projects.json`，媒体存放在 `media/`。
+- **工作台**：`studio/` 下的本地 Node 应用，只监听回环地址；编辑 JSON、处理图片/视频、预览真实页面，发布时只提交 `content/` 与 `media/`。
+- **环境**：工作台需要 Node.js ≥ 21；FFmpeg 可选（只影响视频上传）。
 
-## Quick start
+## 快速开始
 
 ```bash
-git clone <your-repo-url> portfolio-site
-cd portfolio-site/studio
+git clone https://github.com/<你的账号>/portfolio-studio.git
+cd portfolio-studio/studio
 npm install
 cp config.example.json config.json
-# edit config.json: sitePath, production.expectedRemote, production.url (optional)
+# 修改 config.json：sitePath、production.expectedRemote，按需填写 production.url
 npm start
-# open http://127.0.0.1:3737 (or http://localhost:3737)
+# 打开 http://127.0.0.1:3737（或 http://localhost:3737）
 ```
 
-`studio/config.json` is git-ignored. `sitePath` defaults to `..` (the repo root), so the studio manages this repository.
+`studio/config.json` 已被 Git 忽略；`sitePath` 默认是 `..`（仓库根目录），所以工作台直接管理这个仓库。
 
-### Edit without the studio
+### 不想用工作台
 
-You can also edit the JSON files directly:
+也可以直接编辑 JSON 和 `media/`：
 
-- `content/site.json` — profile, links, education, internships, capabilities, avatar.
-- `content/projects.json` — projects, order, status, copy, links, cover, media.
-- `media/projects/<project-slug>/` — project images (WebP) and videos (MP4 + WebP poster).
+- `content/site.json`：个人资料、联系方式、教育、实习、能力、头像。
+- `content/projects.json`：项目状态、顺序、文案、链接、封面与媒体。
+- `media/projects/<项目 slug>/`：项目图片（WebP）与视频（MP4 + WebP 封面）。
 
-See [docs/content-schema.md](docs/content-schema.md) for the full contract.
+字段规则见 [docs/content-schema.md](docs/content-schema.md)。
 
-## Pages
+## 页面
 
-| File | Purpose |
+| 文件 | 说明 |
 | --- | --- |
-| `index.html` | Home: profile hero, selected work, latest posts (optional API) |
-| `about.html` | About: education, experience, capabilities, contact |
-| `projects.html` | Project list with 16:9 covers |
-| `project.html` | Project detail: `?id=<slug>`, cover, filmstrip gallery, video |
-| `blog.html` | Posts list (optional API) |
-| `article.html` | Post detail + comments (optional API) |
+| `index.html` | 首页：个人资料、精选作品、最新文章（文章为可选接口） |
+| `about.html` | 关于页：教育、实习、能力、联系方式 |
+| `projects.html` | 作品列表（16:9 封面） |
+| `project.html` | 作品详情：`?id=<slug>`，大封面、工程胶片、视频 |
+| `blog.html` | 文章列表（可选接口） |
+| `article.html` | 文章详情与留言（可选接口） |
 
-## Optional posts API
+## 可选文章接口
 
-Article sections are disabled by default. To enable them, set `integrations.postsApiBase` in `content/site.json` to an HTTPS API base. The pages expect:
+文章区默认关闭。在 `content/site.json` 里把 `integrations.postsApiBase` 设为 HTTPS 接口地址即可启用。页面期望的契约：
 
 - `GET {base}/posts?pageNum=1&pageSize=6` → `{ "data": { "items": [{ "postId", "title", "excerpt", "category", "createdAt", "commentCount" }] } }`
-- `GET {base}/posts/{id}` → `{ "data": { "title", "content" (Markdown), "category", "createdAt", "commentCount" } }`
+- `GET {base}/posts/{id}` → `{ "data": { "title", "content"（Markdown）, "category", "createdAt", "commentCount" } }`
 - `GET {base}/posts/{id}/comments?pageNum=1&pageSize=50` → `{ "data": { "items": [...] } }`
 
-If the base is empty, the pages show a configuration hint instead of failing requests. The API must allow your site origin via CORS.
+留空时页面显示"文章功能未配置"，不会发起请求。接口需要允许你的站点域名跨域访问。
 
-## Media rules
+## 媒体规则
 
-- Images: JPG / PNG / WebP → WebP, longest side ≤ 1920px, ≤ 2 MiB.
-- Videos: MP4 / MOV / WebM → H.264/AAC MP4, ≤ 1080p, ≤ 12 s, ≤ 18 MiB, plus a WebP poster.
-- Avatar: square 512×512 WebP at `media/profile/avatar.webp` (uploaded from the studio).
-- Total published media ≤ 80 MiB. SVG, GIF and Git LFS pointers are rejected.
+- 图片：JPG / PNG / WebP → WebP，最长边 ≤ 1920px，≤ 2 MiB。
+- 视频：MP4 / MOV / WebM → H.264/AAC MP4，≤ 1080p、≤ 12 秒、≤ 18 MiB，并生成 WebP 封面。
+- 头像：512×512 方图，保存为 `media/profile/avatar.webp`（在工作台上传）。
+- 全部发布媒体 ≤ 80 MiB；拒绝 SVG、GIF 与 Git LFS 指针。
 
-## Publishing
+## 发布
 
-The studio's publish pipeline:
+工作台的发布流水线：
 
-1. validates content and media;
-2. runs the site test script (`npm test` by default, configurable via `production.testScript`);
-3. checks the Git branch, staged area and remote (when configured);
-4. stages only `content/` and `media/`, commits, and pushes `origin/<branch>`;
-5. optionally polls `production.url` for the deployed JSON to confirm the deploy.
+1. 校验内容与媒体；
+2. 运行站点测试脚本（默认 `npm test`，可用 `production.testScript` 修改）；
+3. 检查 Git 分支、暂存区与远程（未配置远程时跳过远程检查）；
+4. 只暂存 `content/` 与 `media/`，提交并推送 `origin/<branch>`；
+5. 可选：轮询 `production.url` 上的 JSON，确认部署已生效。
 
-Configure in `studio/config.json`:
+`studio/config.json` 示例：
 
 ```json
 {
@@ -84,32 +84,34 @@ Configure in `studio/config.json`:
 }
 ```
 
-`production.url` empty or `deployCheck.enabled: false` skips the deploy confirmation; publishing still commits and pushes.
+`production.url` 留空或 `deployCheck.enabled` 为 `false` 时跳过部署确认，但提交与推送照常执行。站点可以部署到任意静态托管（GitHub Pages、Netlify、Vercel、Cloudflare Pages、对象存储 + CDN 等）。
 
-You can deploy the static site anywhere (GitHub Pages, Netlify, Vercel, Cloudflare Pages, object storage + CDN).
+## 工作台功能
 
-## Studio features
+- 页面：首页资料、关于页、作品、素材库、发布。
+- 作品管理：新建、拖拽排序、归档、发布后锁定 slug、选择封面、工程胶片排序、替代文本。
+- 媒体：拖拽上传、自动转 WebP / MP4、视频封面、未使用素材清理。
+- 头像：上传、自动裁切、恢复默认；本地头像优先于姓名首字。
+- 实时预览：右侧加载真实站点页面，读取已保存的草稿。
+- 安全：仅监听回环地址、写接口需要会话令牌、校验 Host / Origin、备份与原子写入、只发布 `content/` 与 `media/`。
 
-- Pages: home profile, about, projects, media library, publish.
-- Project editing: create, drag-sort, archive, slug lock after first publish, cover selection, filmstrip media ordering, alt text.
-- Media: drag-and-drop upload, automatic WebP/MP4 processing, video posters, unused-media cleanup.
-- Avatar: upload/crop/reset, stored locally and preferred over the letter fallback.
-- Live preview of the real site with saved drafts.
-- Safety: binds to loopback only, session token for writes, Host/Origin checks, atomic writes with backups, publishes only `content/` + `media/`.
-
-## Tests
+## 测试
 
 ```bash
-npm test            # site checks
-cd studio && npm test   # studio checks
+npm test                # 站点检查
+cd studio && npm test   # 工作台检查
 ```
 
-## Security notes
+## 安全说明
 
-- The studio is local-only. Do not expose port 3737 publicly.
-- Git uses your existing credentials; no tokens are stored by the studio.
-- `.studio/` (backups, temp files) and `studio/config.json` are git-ignored.
+- 工作台只在本机使用，不要把 3737 端口暴露到公网。
+- Git 使用本机已有凭据，工作台不保存任何 Token。
+- `.studio/`（备份、临时文件）与 `studio/config.json` 已被 Git 忽略。
 
-## License
+## 架构与生效逻辑
 
-MIT — see [LICENSE](LICENSE).
+从编辑到线上生效的完整链路（含流程图、失败分支、缓存与回退策略）见 [docs/how-it-works.md](docs/how-it-works.md)。
+
+## 许可证
+
+MIT，见 [LICENSE](LICENSE)。
