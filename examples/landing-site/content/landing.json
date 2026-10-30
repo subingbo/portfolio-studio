@@ -1,0 +1,11 @@
+{
+  "title": "Landing Page Demo",
+  "subtitle": "一个最小适配器示例",
+  "intro": "这个站点由 landing 适配器管理：单文档 + 扁平图片集合。",
+  "accent": "#f97316",
+  "sections": [
+    { "heading": "内容驱动", "body": "页面读取 content/landing.json，适配器在工作台里生成编辑表单。" },
+    { "heading": "媒体", "body": "图片存放在 media/images/，通过工作台上传并自动转成 WebP。" }
+  ],
+  "images": []
+}

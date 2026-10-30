@@ -3,11 +3,10 @@
 const fsp = require('node:fs/promises')
 const path = require('node:path')
 const sharp = require('sharp')
+const { resolveInside } = require('./config')
+const { setByPath } = require('./adapters/base')
 const { readHead, isGitLfsPointer, sniffBuffer } = require('./magic')
 
-const AVATAR_RELATIVE = 'media/profile/avatar.webp'
-const AVATAR_SIZE = 512
-const AVATAR_MAX_BYTES = 1024 * 1024
 const QUALITY_STEPS = [86, 74, 64, 54]
 
 function avatarError(status, code, message) {
@@ -24,12 +23,28 @@ async function moveFile(from, to) {
   }
 }
 
-function createAvatarStore(config, contentStore) {
-  // 所有路径都是服务端固定常量，不拼接任何请求数据。
+function createAvatarStore(config, documentStore, adapter) {
+  const spec = adapter.avatar
+  if (!spec) {
+    return {
+      supported: false,
+      async beginUpload() {
+        throw avatarError(404, 'AVATAR_NOT_SUPPORTED', '当前适配器没有配置头像')
+      },
+      async finishUpload() {
+        throw avatarError(404, 'AVATAR_NOT_SUPPORTED', '当前适配器没有配置头像')
+      },
+      async removeAvatar() {
+        throw avatarError(404, 'AVATAR_NOT_SUPPORTED', '当前适配器没有配置头像')
+      },
+    }
+  }
+
   const tempInput = path.join(config.paths.temp, 'avatar-input.bin')
   const tempOutput = path.join(config.paths.temp, 'avatar-output.webp')
-  const outputDir = path.join(config.paths.siteMedia, 'profile')
-  const outputFile = path.join(outputDir, 'avatar.webp')
+  const outputFile = resolveInside(config.sitePath, spec.file)
+  const outputDir = path.dirname(outputFile)
+  const maxBytes = spec.maxBytes
 
   async function beginUpload(contentLength) {
     if (!Number.isFinite(contentLength) || contentLength <= 0) {
@@ -67,27 +82,28 @@ function createAvatarStore(config, contentStore) {
       for (const quality of QUALITY_STEPS) {
         buffer = await sharp(tempInput)
           .rotate()
-          .resize(AVATAR_SIZE, AVATAR_SIZE, { fit: 'cover', position: 'centre' })
+          .resize(spec.size, spec.size, { fit: 'cover', position: 'centre' })
           .webp({ quality })
           .toBuffer()
-        if (buffer.length <= AVATAR_MAX_BYTES) break
+        if (buffer.length <= maxBytes) break
       }
-      if (!buffer || buffer.length > AVATAR_MAX_BYTES) {
-        throw avatarError(413, 'MEDIA_TOO_LARGE', '头像压缩后仍超过 1 MiB，请换一张更简单的图片')
+      if (!buffer || buffer.length > maxBytes) {
+        throw avatarError(413, 'MEDIA_TOO_LARGE', '头像压缩后仍超过 ' + Math.round(maxBytes / 1024) + ' KiB')
       }
       await fsp.mkdir(outputDir, { recursive: true })
       await fsp.writeFile(tempOutput, buffer)
       await moveFile(tempOutput, outputFile)
-      const site = await contentStore.readSite()
-      site.profile.avatar = AVATAR_RELATIVE
-      const saved = await contentStore.saveSite(site)
+
+      const documentData = await documentStore.readDocument(spec.document)
+      setByPath(documentData, spec.pointer, spec.file)
+      const saved = await documentStore.saveDocument(spec.document, documentData)
       if (!saved.ok) {
         const first = saved.errors && saved.errors[0]
-        throw avatarError(400, 'INVALID_CONTENT', first ? first.path + '：' + first.message : '站点资料校验失败')
+        throw avatarError(400, 'INVALID_CONTENT', first ? first.path + '：' + first.message : '站点文档校验失败')
       }
       const metadata = await sharp(buffer).metadata()
       return {
-        avatar: AVATAR_RELATIVE,
+        avatar: spec.file,
         meta: { size: buffer.length, width: metadata.width, height: metadata.height },
         warnings: saved.warnings || [],
       }
@@ -98,17 +114,17 @@ function createAvatarStore(config, contentStore) {
   }
 
   async function removeAvatar() {
-    const site = await contentStore.readSite()
-    site.profile.avatar = ''
-    const saved = await contentStore.saveSite(site)
+    const documentData = await documentStore.readDocument(spec.document)
+    setByPath(documentData, spec.pointer, '')
+    const saved = await documentStore.saveDocument(spec.document, documentData)
     if (!saved.ok) {
       const first = saved.errors && saved.errors[0]
-      throw avatarError(400, 'INVALID_CONTENT', first ? first.path + '：' + first.message : '站点资料校验失败')
+      throw avatarError(400, 'INVALID_CONTENT', first ? first.path + '：' + first.message : '站点文档校验失败')
     }
     return { ok: true, avatar: '', warnings: saved.warnings || [] }
   }
 
-  return { beginUpload, finishUpload, removeAvatar, relativePath: AVATAR_RELATIVE }
+  return { supported: true, beginUpload, finishUpload, removeAvatar, relativePath: spec.file }
 }
 
-module.exports = { createAvatarStore, AVATAR_RELATIVE }
+module.exports = { createAvatarStore }

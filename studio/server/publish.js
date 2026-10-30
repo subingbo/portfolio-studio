@@ -3,23 +3,14 @@
 const fs = require('node:fs')
 const path = require('node:path')
 const { runProcess, tailLines, canonicalJson, assertPublicHttpsUrl, fetchWithTimeout } = require('./util')
-const { validateContent } = require('./validate')
+const { validateDocuments } = require('./validate')
+const { getByPath } = require('./adapters/base')
 const { createGit } = require('./git')
 
 function resolveNpmCli() {
   const candidate = path.join(path.dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js')
   return fs.existsSync(candidate) ? candidate : null
 }
-
-const STEP_DEFINITIONS = [
-  { id: 'validate', label: '校验内容与媒体' },
-  { id: 'tests', label: '运行站点验收测试' },
-  { id: 'preflight', label: '检查 Git 状态与远程分支' },
-  { id: 'stage', label: '暂存 content 与 media' },
-  { id: 'commit', label: '创建内容提交' },
-  { id: 'push', label: '推送到 origin/main' },
-  { id: 'deploy', label: '等待部署生效' },
-]
 
 function publishError(code, message, status) {
   return Object.assign(new Error(message), { code, status: status || 409 })
@@ -43,11 +34,53 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-function createPublisher(config, state, contentStore, options = {}) {
+// 从适配器的 lockFrom 规则中提取发布后应锁定的标识。
+function collectLockKeys(adapter, documents) {
+  const keys = []
+  for (const rule of adapter.publish.lockFrom || []) {
+    const documentData = documents[rule.document]
+    if (!documentData) continue
+    if (rule.via === 'collection') {
+      const items = Array.isArray(documentData[rule.itemsKey]) ? documentData[rule.itemsKey] : []
+      for (const item of items) {
+        if (item && typeof item[rule.field] === 'string' && item[rule.field]) keys.push(item[rule.field])
+      }
+    } else if (Array.isArray(rule.path)) {
+      const value = getByPath(documentData, rule.path)
+      if (Array.isArray(value)) {
+        for (const entry of value) {
+          if (typeof entry === 'string' && entry) keys.push(entry)
+        }
+      }
+    }
+  }
+  return keys
+}
+
+function createPublisher(config, state, contentStore, adapter, options = {}) {
   const git = createGit(config)
   const clients = new Set()
-  const deployCheckEnabled = Boolean(config.production.url) && config.production.deployCheck.enabled !== false
+  const publishSpec = adapter.publish || {}
+  const stagePaths = Array.isArray(publishSpec.stagePaths) && publishSpec.stagePaths.length
+    ? publishSpec.stagePaths
+    : ['content', 'media']
+  const deployTargets = Array.isArray(publishSpec.deployTargets) ? publishSpec.deployTargets : []
+  const commitPrefix = publishSpec.commitPrefix || 'content:'
+  const stepLabels = publishSpec.stepLabels || {}
+  const deployCheckEnabled = Boolean(config.production.url) &&
+    config.production.deployCheck.enabled !== false &&
+    deployTargets.length > 0
   const productionHost = config.production.url ? new URL(config.production.url).hostname : ''
+
+  const stepDefinitions = [
+    { id: 'validate', label: '校验内容与媒体' },
+    { id: 'tests', label: '运行站点测试' },
+    { id: 'preflight', label: '检查 Git 状态与远程分支' },
+    { id: 'stage', label: stepLabels.stage || '暂存内容与媒体' },
+    { id: 'commit', label: '创建提交' },
+    { id: 'push', label: '推送到 ' + config.production.branch },
+    { id: 'deploy', label: '等待部署生效' },
+  ]
 
   let status = freshStatus()
 
@@ -58,7 +91,7 @@ function createPublisher(config, state, contentStore, options = {}) {
       message: '',
       startedAt: null,
       finishedAt: null,
-      steps: STEP_DEFINITIONS.map((step) => Object.assign({}, step, { status: 'pending', detail: '', log: '' })),
+      steps: stepDefinitions.map((step) => Object.assign({}, step, { status: 'pending', detail: '', log: '' })),
     }
   }
 
@@ -99,17 +132,18 @@ function createPublisher(config, state, contentStore, options = {}) {
     broadcast()
   }
 
-  async function waitForDeploy(site, projects) {
+  async function waitForDeploy(documents) {
     if (options.deployProbe) {
-      return options.deployProbe({ site, projects })
+      return options.deployProbe({ documents })
     }
     if (!deployCheckEnabled) {
       return { ok: true, skipped: true, detail: '部署确认已关闭（在 config.json 的 production.deployCheck 中启用）' }
     }
-    const targets = [
-      { url: config.production.url + '/content/site.json', value: site },
-      { url: config.production.url + '/content/projects.json', value: projects },
-    ]
+    const targets = deployTargets.map((target) => ({
+      url: config.production.url + target.urlPath,
+      value: documents[target.document],
+      documentId: target.document,
+    }))
     const startedAt = Date.now()
     let attempt = 0
     let lastError = '尚未收到响应'
@@ -158,11 +192,10 @@ function createPublisher(config, state, contentStore, options = {}) {
   }
 
   async function run() {
-    const projects = await contentStore.readProjects()
-    const site = await contentStore.readSite()
+    const documents = await contentStore.readAll()
 
     setStep('validate', 'running')
-    const validation = validateContent({ site, projects, config, mode: 'publish' })
+    const validation = validateDocuments({ adapter, documents, config, mode: 'publish' })
     if (!validation.ok) {
       setStep('validate', 'failed', validation.errors.length + ' 个错误', formatIssues(validation.errors))
       finish('failed', '内容校验未通过：' + validation.errors[0].message)
@@ -171,18 +204,19 @@ function createPublisher(config, state, contentStore, options = {}) {
     setStep('validate', 'passed', validation.warnings.length ? validation.warnings.length + ' 个提醒' : '通过', formatIssues(validation.warnings))
 
     setStep('tests', 'running')
-    // 直接使用当前 Node 自带的 npm-cli.js，不经过 shell；找不到时明确报错。
     const npmCli = resolveNpmCli()
     if (!npmCli) {
       setStep('tests', 'failed', '找不到 npm-cli.js', '')
       finish('failed', '未找到当前 Node 自带的 npm-cli.js，请使用标准 Node 安装运行工作台。')
       return
     }
+    const scriptName = String(config.production.testScript || 'test')
+    if (!/^[A-Za-z0-9:_-]+$/.test(scriptName)) {
+      setStep('tests', 'failed', '测试脚本名不合法', scriptName)
+      finish('failed', '站点测试脚本名不合法：' + scriptName)
+      return
+    }
     try {
-      const scriptName = String(config.production.testScript || 'test')
-      if (!/^[A-Za-z0-9:_-]+$/.test(scriptName)) {
-        throw new Error('站点测试脚本名不合法：' + scriptName)
-      }
       const tests = await runProcess(process.execPath, [npmCli, scriptName], {
         cwd: config.sitePath,
         timeoutMs: config.limits.testTimeoutMs,
@@ -238,13 +272,13 @@ function createPublisher(config, state, contentStore, options = {}) {
     setStep('stage', 'running')
     let staged
     try {
-      await git.addContent()
+      await git.addContent(stagePaths)
       staged = await git.stagedFiles()
       const unexpected = staged.filter((file) => {
-        return !(file === 'content' || file.startsWith('content/') || file === 'media' || file.startsWith('media/'))
+        return !stagePaths.some((root) => file === root || file.startsWith(root + '/'))
       })
       if (unexpected.length) {
-        throw new Error('暂存区包含 content/ 与 media/ 之外的文件：' + unexpected.join('、'))
+        throw new Error('暂存区包含发布路径之外的文件：' + unexpected.join('、'))
       }
       setStep('stage', 'passed', staged.length ? staged.length + ' 个文件' : '没有变更')
     } catch (error) {
@@ -257,12 +291,12 @@ function createPublisher(config, state, contentStore, options = {}) {
       setStep('commit', 'skipped', '没有内容变更')
       setStep('push', 'skipped', '没有内容变更')
       setStep('deploy', 'skipped', '没有内容变更')
-      finish('no-changes', 'content/ 与 media/ 没有变更，无需发布。')
+      finish('no-changes', '发布路径下没有变更，无需发布。')
       return
     }
 
     setStep('commit', 'running')
-    const message = 'content: 工作台内容更新 ' + timestamp()
+    const message = commitPrefix + ' 工作台内容更新 ' + timestamp()
     try {
       await git.commit(message)
       setStep('commit', 'passed', message, await git.logLine())
@@ -282,10 +316,11 @@ function createPublisher(config, state, contentStore, options = {}) {
       return
     }
 
-    state.lockSlugs((projects.projects || []).map((project) => project.slug))
+    const lockKeys = collectLockKeys(adapter, documents)
+    if (lockKeys.length) state.lockSlugs(lockKeys)
 
     setStep('deploy', 'running', deployCheckEnabled ? '等待正式域名返回最新内容…' : '部署确认已关闭…')
-    const deploy = await waitForDeploy(site, projects)
+    const deploy = await waitForDeploy(documents)
     if (deploy.ok) {
       if (deploy.skipped) {
         setStep('deploy', 'skipped', deploy.detail)
@@ -348,4 +383,4 @@ function createPublisher(config, state, contentStore, options = {}) {
   return { start, subscribe, snapshot }
 }
 
-module.exports = { createPublisher, STEP_DEFINITIONS }
+module.exports = { createPublisher, collectLockKeys }

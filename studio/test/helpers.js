@@ -85,6 +85,30 @@ async function createFixtureSite(sitePath, options = {}) {
   return sitePath
 }
 
+async function createLandingFixture(sitePath, options = {}) {
+  await writeJson(path.join(sitePath, 'content', 'landing.json'), options.landing || {
+    title: 'Landing fixture',
+    subtitle: 'Fixture subtitle',
+    intro: 'Fixture intro',
+    accent: '#f97316',
+    sections: [{ heading: 'Section', body: 'Body' }],
+    images: [],
+  })
+  await fsp.mkdir(path.join(sitePath, 'media', 'images'), { recursive: true })
+  await fsp.writeFile(path.join(sitePath, 'index.html'), '<!doctype html><title>landing fixture</title>\n', 'utf8')
+  await fsp.writeFile(
+    path.join(sitePath, 'package.json'),
+    JSON.stringify({
+      name: 'landing-fixture',
+      private: true,
+      type: 'commonjs',
+      scripts: { test: 'node -e "process.exit(0)"' },
+    }, null, 2) + '\n',
+    'utf8'
+  )
+  return sitePath
+}
+
 function makePng(width, height, color) {
   return sharp({
     create: {
@@ -107,6 +131,7 @@ async function startApp(options = {}) {
       studioRoot: root,
       sitePath,
       port: 0,
+      adapter: options.adapter,
       production: options.production || {
         url: '',
         expectedRemote: '',
@@ -251,6 +276,7 @@ module.exports = {
   baseSite,
   baseProjects,
   createFixtureSite,
+  createLandingFixture,
   makePng,
   startApp,
   request,

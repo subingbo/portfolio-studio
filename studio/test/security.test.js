@@ -148,7 +148,7 @@ test('媒体上传拒绝未知项目与跨目录 slug', async (t) => {
   const png = await makePng(16, 16)
   const missing = await uploadRequest(context, { project: 'missing', body: png })
   assert.equal(missing.status, 404)
-  assert.equal(missing.json.error, 'PROJECT_NOT_FOUND')
+  assert.equal(missing.json.error, 'ITEM_NOT_FOUND')
 
   const traversal = await uploadRequest(context, { project: '../outside', body: png })
   assert.ok([400, 404].includes(traversal.status))

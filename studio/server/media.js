@@ -5,31 +5,35 @@ const fs = require('node:fs')
 const fsp = require('node:fs/promises')
 const path = require('node:path')
 const { SAFE_FILE_NAME } = require('./util')
+const { resolveInside } = require('./config')
 const { readHead, isGitLfsPointer, sniffBuffer } = require('./magic')
 const { processImage } = require('./images')
 const { processVideo, checkFfmpeg, ffmpegMissing } = require('./videos')
-const { SLUG_PATTERN } = require('./validate')
+const {
+  mediaEntries,
+  dirRelative,
+  fileRelative,
+  findItemByKey,
+  referenceMap,
+  limitsFor,
+  itemDefaults,
+} = require('./media-model')
 
-const MEDIA_PATH_PATTERN = /^media\/projects\/([a-z0-9][a-z0-9-]*)\/([A-Za-z0-9._-]+)$/
+const SESSION_TTL_MS = 15 * 60 * 1000
+const EXTENSION_TYPE = {
+  '.webp': 'image',
+  '.png': 'image',
+  '.jpg': 'image',
+  '.jpeg': 'image',
+  '.gif': 'image',
+  '.avif': 'image',
+  '.mp4': 'video',
+  '.mov': 'video',
+  '.webm': 'video',
+}
 
 function mediaError(status, code, message) {
   return Object.assign(new Error(message), { code, status })
-}
-
-function buildReferenceMap(data) {
-  const map = new Map()
-  function add(relative, projectSlug, mediaId, field) {
-    if (typeof relative !== 'string' || !relative) return
-    if (!map.has(relative)) map.set(relative, [])
-    map.get(relative).push({ project: projectSlug, mediaId, field })
-  }
-  for (const project of data.projects || []) {
-    for (const item of project.media || []) {
-      add(item.src, project.slug, item.id, 'src')
-      add(item.poster, project.slug, item.id, 'poster')
-    }
-  }
-  return map
 }
 
 async function moveFile(from, to) {
@@ -42,28 +46,56 @@ async function moveFile(from, to) {
   }
 }
 
-function createMediaStore(config, contentStore) {
-  const limits = config.limits
-  const projectsRoot = path.join(config.paths.siteMedia, 'projects')
+function createMediaStore(config, documentStore, adapter) {
+  const collections = new Map(adapter.mediaCollections.map((collection) => [collection.id, collection]))
+  const sessions = new Map()
 
-  function projectDirectory(slug) {
-    if (typeof slug !== 'string' || !SLUG_PATTERN.test(slug)) {
-      throw mediaError(400, 'INVALID_SLUG', '项目 slug 不合法')
+  function collectionById(id) {
+    if (!adapter.mediaCollections.length) {
+      throw mediaError(400, 'NO_MEDIA_COLLECTION', '该站点没有配置媒体集合')
     }
-    const boundary = path.resolve(projectsRoot)
-    const target = path.resolve(boundary, slug)
-    if (!target.startsWith(boundary + path.sep)) {
-      throw mediaError(400, 'INVALID_SLUG', '项目 slug 越界')
+    if (!id) return adapter.mediaCollections[0]
+    const collection = collections.get(id)
+    if (!collection) throw mediaError(400, 'UNKNOWN_MEDIA_COLLECTION', '未知媒体集合：' + id)
+    return collection
+  }
+
+  function limitsOf(collection) {
+    return limitsFor(collection, config)
+  }
+
+  function outputExtension(collection, kind) {
+    const formats = collection.formats && Array.isArray(collection.formats[kind]) ? collection.formats[kind] : []
+    if (formats.length) return formats[0]
+    return kind === 'video' ? '.mp4' : '.webp'
+  }
+
+  function tempDirectory(token) {
+    if (typeof token !== 'string' || !/^[a-f0-9]{32}$/.test(token)) {
+      throw mediaError(400, 'INVALID_UPLOAD_TOKEN', '上传会话令牌不合法')
     }
-    return target
+    return resolveInside(config.paths.temp, token)
+  }
+
+  function targetDirectory(collection, itemKey) {
+    const relative = dirRelative(collection, itemKey)
+    if (!relative) throw mediaError(400, 'INVALID_ITEM', '缺少媒体所属条目')
+    return resolveInside(config.sitePath, relative)
+  }
+
+  async function allMediaIds() {
+    const documents = await documentStore.readAll()
+    const ids = new Set()
+    for (const collection of adapter.mediaCollections) {
+      for (const entry of mediaEntries(collection, documents)) {
+        if (entry.media && typeof entry.media.id === 'string') ids.add(entry.media.id)
+      }
+    }
+    return ids
   }
 
   async function uniqueMediaId(kind) {
-    const data = await contentStore.readProjects()
-    const used = new Set()
-    for (const project of data.projects || []) {
-      for (const item of project.media || []) used.add(item.id)
-    }
+    const used = await allMediaIds()
     for (let attempt = 0; attempt < 5; attempt += 1) {
       const candidate = (kind === 'image' ? 'img' : 'vid') + '-' +
         Date.now().toString(36) + '-' + crypto.randomBytes(3).toString('hex')
@@ -72,81 +104,25 @@ function createMediaStore(config, contentStore) {
     throw mediaError(500, 'ID_COLLISION', '无法生成唯一媒体 id')
   }
 
-  async function finalize({ slug, targetDir, mediaId, outputFile, posterFile, type, info }) {
-    await fsp.mkdir(targetDir, { recursive: true })
-    const outputName = path.basename(outputFile)
-    if (!SAFE_FILE_NAME.test(outputName)) {
-      throw mediaError(500, 'INTERNAL', '内部文件名不合法')
-    }
-    await moveFile(outputFile, path.join(targetDir, outputName))
-    let poster = null
-    if (posterFile) {
-      const posterName = path.basename(posterFile)
-      if (!SAFE_FILE_NAME.test(posterName)) {
-        throw mediaError(500, 'INTERNAL', '内部文件封面名不合法')
-      }
-      await moveFile(posterFile, path.join(targetDir, posterName))
-      poster = 'media/projects/' + slug + '/' + posterName
-    }
-    return {
-      media: {
-        id: mediaId,
-        type,
-        src: 'media/projects/' + slug + '/' + outputName,
-        poster,
-        alt: '',
-        caption: '',
-        tag: '',
-      },
-      meta: {
-        size: info.size || info.bytes,
-        width: info.width,
-        height: info.height,
-        duration: typeof info.duration === 'number' ? info.duration : null,
-      },
-    }
-  }
-
-  const uploadSessions = new Map()
-  const SESSION_TTL_MS = 15 * 60 * 1000
-
-  // 会话令牌只允许 32 位十六进制；临时目录与输入文件都从这里派生。
-  function tempDirectory(token) {
-    if (typeof token !== 'string' || !/^[a-f0-9]{32}$/.test(token)) {
-      throw mediaError(400, 'INVALID_UPLOAD_TOKEN', '上传会话令牌不合法')
-    }
-    const boundary = path.resolve(config.paths.temp)
-    const target = path.resolve(boundary, token)
-    if (!target.startsWith(boundary + path.sep)) {
-      throw mediaError(400, 'INVALID_UPLOAD_TOKEN', '上传会话令牌越界')
-    }
-    return target
-  }
-
-  function tempInputFile(token) {
-    const directory = tempDirectory(token)
-    return path.join(directory, 'input.bin')
-  }
-
-  // 项目目录只从 projects.json 的条目派生；路径解析后再做目录边界校验。
-  function resolveProjectDirectory(slug) {
-    return projectDirectory(slug)
-  }
-
   function sweepSessions() {
     const now = Date.now()
-    for (const [token, session] of uploadSessions) {
+    for (const [token, session] of sessions) {
       if (now - session.createdAt <= SESSION_TTL_MS) continue
-      uploadSessions.delete(token)
+      sessions.delete(token)
       fsp.rm(tempDirectory(token), { recursive: true, force: true }).catch(() => {})
     }
   }
 
-  // 建立上传会话：绑定项目（来自 projects.json 的规范 slug）、上限与临时文件句柄。
-  async function createUploadSession({ requestedSlug, kind, contentLength }) {
+  async function createUploadSession({ collectionId, itemKey, kind, contentLength }) {
+    const collection = collectionById(collectionId)
     if (kind !== 'image' && kind !== 'video') {
       throw mediaError(400, 'INVALID_KIND', 'kind 必须是 image 或 video')
     }
+    const formats = collection.formats || {}
+    if (!Array.isArray(formats[kind]) || formats[kind].length === 0) {
+      throw mediaError(400, 'UNSUPPORTED_MEDIA_KIND', '该媒体集合不支持 ' + kind + ' 类型')
+    }
+    const limits = limitsOf(collection)
     const cap = kind === 'image' ? limits.uploadImageMaxBytes : limits.uploadVideoMaxBytes
     if (!Number.isFinite(contentLength) || contentLength <= 0) {
       throw mediaError(411, 'LENGTH_REQUIRED', '上传请求缺少 Content-Length')
@@ -154,14 +130,14 @@ function createMediaStore(config, contentStore) {
     if (contentLength > cap) {
       throw mediaError(413, 'UPLOAD_TOO_LARGE', '文件超过上传上限（' + Math.round(cap / 1024 / 1024) + ' MiB）')
     }
-    const projects = await contentStore.readProjects()
-    const projectIndex = (projects.projects || []).findIndex((item) => item.slug === requestedSlug)
-    const project = projectIndex >= 0 ? projects.projects[projectIndex] : null
-    if (!project) {
-      throw mediaError(404, 'PROJECT_NOT_FOUND', '项目不存在，请先保存项目再上传媒体')
-    }
-    if (!SLUG_PATTERN.test(project.slug || '')) {
-      throw mediaError(400, 'INVALID_SLUG', '项目 slug 不合法')
+    if (collection.mode === 'collection' && collection.dirKey) {
+      if (typeof itemKey !== 'string' || !itemKey) {
+        throw mediaError(400, 'INVALID_ITEM', '缺少媒体所属条目')
+      }
+      const documents = await documentStore.readAll()
+      if (!findItemByKey(collection, documents, itemKey)) {
+        throw mediaError(404, 'ITEM_NOT_FOUND', '条目不存在，请先保存再上传媒体')
+      }
     }
     if (kind === 'video' && !(await checkFfmpeg())) {
       throw ffmpegMissing()
@@ -169,34 +145,40 @@ function createMediaStore(config, contentStore) {
     sweepSessions()
     const token = crypto.randomBytes(16).toString('hex')
     await fsp.mkdir(tempDirectory(token), { recursive: true })
-    const handle = await fsp.open(tempInputFile(token), 'wx')
-    uploadSessions.set(token, { kind, cap, projectIndex, createdAt: Date.now() })
+    const handle = await fsp.open(path.join(tempDirectory(token), 'input.bin'), 'wx')
+    sessions.set(token, {
+      collectionId: collection.id,
+      itemKey: collection.mode === 'collection' && collection.dirKey ? itemKey : null,
+      kind,
+      cap,
+      createdAt: Date.now(),
+    })
     return { token, cap, handle }
   }
 
   async function abortUpload(token) {
     if (!/^[a-f0-9]{32}$/.test(String(token || ''))) return
-    uploadSessions.delete(token)
+    sessions.delete(token)
     await fsp.rm(tempDirectory(token), { recursive: true, force: true }).catch(() => {})
   }
 
-  // 转换函数只接收上传会话令牌；项目目录来自 projects.json 的条目。
   async function convertUpload({ token }) {
-    const session = uploadSessions.get(token)
+    const session = sessions.get(token)
     if (!session) {
       throw mediaError(410, 'UPLOAD_EXPIRED', '上传会话不存在或已过期，请重试')
     }
+    const collection = collectionById(session.collectionId)
+    const limits = limitsOf(collection)
     const tmpDir = tempDirectory(token)
-    const inputFile = tempInputFile(token)
+    const inputFile = path.join(tmpDir, 'input.bin')
     try {
-      const projects = await contentStore.readProjects()
-      const list = Array.isArray(projects.projects) ? projects.projects : []
-      const project = list[session.projectIndex]
-      if (!project) {
-        throw mediaError(400, 'PROJECT_NOT_FOUND', '项目不存在，请先保存项目再上传媒体')
+      if (session.itemKey) {
+        const documents = await documentStore.readAll()
+        if (!findItemByKey(collection, documents, session.itemKey)) {
+          throw mediaError(404, 'ITEM_NOT_FOUND', '条目不存在，请先保存再上传媒体')
+        }
       }
-      const slug = project.slug
-      const targetDir = resolveProjectDirectory(slug)
+      const targetDir = targetDirectory(collection, session.itemKey)
       const head = readHead(inputFile)
       if (isGitLfsPointer(head)) {
         throw mediaError(400, 'LFS_POINTER', '检测到 Git LFS 指针文件，请上传真实媒体文件')
@@ -212,107 +194,172 @@ function createMediaStore(config, contentStore) {
         throw mediaError(415, 'MIME_MISMATCH', '文件内容与上传类型不符')
       }
       const mediaId = await uniqueMediaId(session.kind)
+      const extension = outputExtension(collection, session.kind)
+      await fsp.mkdir(targetDir, { recursive: true })
+
       if (session.kind === 'image') {
-        const outputFile = path.join(tmpDir, mediaId + '.webp')
+        const outputFile = path.join(tmpDir, mediaId + extension)
         const info = await processImage(inputFile, outputFile, limits)
-        return await finalize({ slug, targetDir, mediaId, outputFile, posterFile: null, type: 'image', info })
+        const outputName = path.basename(outputFile)
+        if (!SAFE_FILE_NAME.test(outputName)) throw mediaError(500, 'INTERNAL', '内部文件名不合法')
+        await moveFile(outputFile, path.join(targetDir, outputName))
+        return {
+          media: Object.assign({
+            id: mediaId,
+            type: 'image',
+            src: fileRelative(collection, session.itemKey, outputName),
+            poster: null,
+          }, itemDefaults(collection)),
+          meta: { size: info.bytes, width: info.width, height: info.height, duration: null },
+        }
       }
-      const outputFile = path.join(tmpDir, mediaId + '.mp4')
+
+      const outputFile = path.join(tmpDir, mediaId + extension)
       const posterFile = path.join(tmpDir, mediaId + '-poster.webp')
       const info = await processVideo(inputFile, outputFile, posterFile, limits)
-      return await finalize({ slug, targetDir, mediaId, outputFile, posterFile, type: 'video', info })
+      const outputName = path.basename(outputFile)
+      const posterName = path.basename(posterFile)
+      if (!SAFE_FILE_NAME.test(outputName) || !SAFE_FILE_NAME.test(posterName)) {
+        throw mediaError(500, 'INTERNAL', '内部文件名不合法')
+      }
+      await moveFile(outputFile, path.join(targetDir, outputName))
+      await moveFile(posterFile, path.join(targetDir, posterName))
+      return {
+        media: Object.assign({
+          id: mediaId,
+          type: 'video',
+          src: fileRelative(collection, session.itemKey, outputName),
+          poster: fileRelative(collection, session.itemKey, posterName),
+        }, itemDefaults(collection)),
+        meta: {
+          size: info.size,
+          width: info.width,
+          height: info.height,
+          duration: typeof info.duration === 'number' ? info.duration : null,
+        },
+      }
     } finally {
-      uploadSessions.delete(token)
+      sessions.delete(token)
       await fsp.rm(tmpDir, { recursive: true, force: true }).catch(() => {})
     }
   }
 
-  async function list() {
-    const data = await contentStore.readProjects()
-    const references = buildReferenceMap(data)
+  function listFiles(rootDir) {
     const files = []
-    if (fs.existsSync(projectsRoot)) {
-      for (const projectEntry of fs.readdirSync(projectsRoot, { withFileTypes: true })) {
-        if (!projectEntry.isDirectory() || !SLUG_PATTERN.test(projectEntry.name)) continue
-        const projectDir = path.join(projectsRoot, projectEntry.name)
-        for (const fileEntry of fs.readdirSync(projectDir, { withFileTypes: true })) {
-          if (!fileEntry.isFile() || !SAFE_FILE_NAME.test(fileEntry.name)) continue
-          const absolute = path.join(projectDir, fileEntry.name)
-          const stat = fs.statSync(absolute)
-          const relative = 'media/projects/' + projectEntry.name + '/' + fileEntry.name
-          const extension = path.extname(fileEntry.name).toLowerCase()
-          files.push({
-            path: relative,
-            project: projectEntry.name,
-            name: fileEntry.name,
-            type: extension === '.mp4' ? 'video' : extension === '.webp' ? 'image' : 'other',
-            size: stat.size,
-            modifiedAt: stat.mtime.toISOString(),
-            references: references.get(relative) || [],
-          })
+    const stack = [{ absolute: rootDir, relative: '' }]
+    while (stack.length) {
+      const current = stack.pop()
+      let entries = []
+      try {
+        entries = fs.readdirSync(current.absolute, { withFileTypes: true })
+      } catch (error) {
+        continue
+      }
+      for (const entry of entries) {
+        if (entry.name.startsWith('.') || !SAFE_FILE_NAME.test(entry.name)) continue
+        const absolute = path.join(current.absolute, entry.name)
+        if (entry.isDirectory()) {
+          stack.push({ absolute, relative: current.relative + '/' + entry.name })
+        } else if (entry.isFile()) {
+          files.push({ absolute, relative: current.relative + '/' + entry.name })
         }
       }
     }
-    files.sort((a, b) => a.path.localeCompare(b.path))
+    return files
+  }
+
+  async function list(collectionId) {
+    const collection = collectionById(collectionId)
+    const limits = limitsOf(collection)
+    const documents = await documentStore.readAll()
+    const references = referenceMap(adapter, documents)
+    const root = resolveInside(config.sitePath, collection.root)
+    const files = listFiles(root).map((file) => {
+      const relative = collection.root + file.relative
+      const stat = fs.statSync(file.absolute)
+      const segments = file.relative.split('/').filter(Boolean)
+      const extension = path.extname(file.relative).toLowerCase()
+      return {
+        path: relative,
+        project: collection.mode === 'collection' && collection.dirKey ? (segments[0] || null) : null,
+        name: path.basename(file.relative),
+        type: EXTENSION_TYPE[extension] || 'other',
+        size: stat.size,
+        modifiedAt: stat.mtime.toISOString(),
+        references: references.get(relative) || [],
+      }
+    })
+    files.sort((left, right) => left.path.localeCompare(right.path))
     return {
+      collection: collection.id,
       files,
       totalBytes: files.reduce((sum, file) => sum + file.size, 0),
-      totalLimit: limits.mediaTotalMaxBytes,
+      totalLimit: limits.totalMaxBytes || config.limits.mediaTotalMaxBytes,
     }
   }
 
-  async function removeReference(slug, mediaId) {
-    const data = await contentStore.readProjects()
-    const project = (data.projects || []).find((item) => item.slug === slug)
-    if (!project) throw mediaError(404, 'PROJECT_NOT_FOUND', '项目不存在')
-    const index = (project.media || []).findIndex((item) => item.id === mediaId)
-    if (index < 0) throw mediaError(404, 'MEDIA_NOT_FOUND', '媒体不存在或已被移除')
-    project.media.splice(index, 1)
-    if (project.coverMediaId === mediaId) project.coverMediaId = null
-    const result = await contentStore.saveProjects(data, [])
+  async function removeReference({ collectionId, itemKey, mediaId }) {
+    const collection = collectionById(collectionId)
+    const documents = await documentStore.readAll()
+    const entries = mediaEntries(collection, documents)
+    const entry = entries.find((candidate) => {
+      if (!candidate.media || candidate.media.id !== mediaId) return false
+      if (collection.mode === 'collection' && collection.dirKey) return candidate.itemKey === itemKey
+      return true
+    })
+    if (!entry) throw mediaError(404, 'MEDIA_NOT_FOUND', '媒体不存在或已被移除')
+    entry.list.splice(entry.mediaIndex, 1)
+    if (collection.cover && entry.item && entry.item[collection.cover.field] === mediaId) {
+      entry.item[collection.cover.field] = null
+    }
+    const documentData = documents[collection.document]
+    const result = await documentStore.saveDocument(collection.document, documentData)
     if (!result.ok) {
       return { ok: false, errors: result.errors, warnings: result.warnings }
     }
-    return { ok: true, warnings: result.warnings, projects: data }
+    return { ok: true, warnings: result.warnings }
   }
 
-  async function cleanupCandidates() {
-    const listing = await list()
+  async function cleanupCandidates(collectionId) {
+    const listing = await list(collectionId)
     return {
+      collection: listing.collection,
       candidates: listing.files.filter((file) => file.references.length === 0),
       totalBytes: listing.totalBytes,
       totalLimit: listing.totalLimit,
     }
   }
 
-  async function deleteFiles(relativePaths) {
+  function safeRelative(collection, relativePath) {
+    if (typeof relativePath !== 'string') return false
+    if (!relativePath.startsWith(collection.root + '/')) return false
+    const rest = relativePath.slice(collection.root.length + 1)
+    const segments = rest.split('/')
+    if (!segments.length) return false
+    return segments.every((segment) => SAFE_FILE_NAME.test(segment))
+  }
+
+  async function deleteFiles(collectionId, relativePaths) {
     if (!Array.isArray(relativePaths) || relativePaths.length === 0) {
       throw mediaError(400, 'INVALID_INPUT', '需要要删除的文件列表')
     }
-    const data = await contentStore.readProjects()
-    const references = buildReferenceMap(data)
+    const collection = collectionById(collectionId)
+    const documents = await documentStore.readAll()
+    const references = referenceMap(adapter, documents)
     const deleted = []
     for (const relative of relativePaths) {
-      if (typeof relative !== 'string') {
-        throw mediaError(400, 'INVALID_PATH', '文件路径不合法')
-      }
-      const match = MEDIA_PATH_PATTERN.exec(relative)
-      if (!match) {
+      if (!safeRelative(collection, relative)) {
         throw mediaError(400, 'INVALID_PATH', '文件路径不合法：' + relative)
-      }
-      const [, slug, fileName] = match
-      if (!SAFE_FILE_NAME.test(fileName)) {
-        throw mediaError(400, 'INVALID_PATH', '文件名不合法：' + relative)
       }
       if (references.has(relative)) {
         throw mediaError(409, 'STILL_REFERENCED', '仍被引用的文件不能删除：' + relative)
       }
-      const absolute = path.join(projectDirectory(slug), fileName)
+      const absolute = resolveInside(config.sitePath, relative)
       if (!fs.existsSync(absolute)) continue
       await fsp.unlink(absolute)
       deleted.push(relative)
     }
-    return { deleted }
+    return { collection: collection.id, deleted }
   }
 
   return {
@@ -327,4 +374,4 @@ function createMediaStore(config, contentStore) {
   }
 }
 
-module.exports = { createMediaStore, buildReferenceMap, MEDIA_PATH_PATTERN }
+module.exports = { createMediaStore }

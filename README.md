@@ -51,6 +51,28 @@ npm start
 
 留空时页面显示"文章功能未配置"，不会发起请求。接口需要允许你的站点域名跨域访问。
 
+## 适配器：接入自己的站点结构
+
+默认的 `portfolio` 适配器对应本仓库的模板。要让工作台管理**另一种站点结构**，在 `studio/adapters/<id>/index.js` 实现 `BaseAdapter`（或写一个满足同样接口的对象），声明内容文档、媒体集合、头像、发布范围与界面清单，然后在 `studio/config.json` 里设置：
+
+```json
+{ "adapter": "<id>" }
+```
+
+- 内容路径、字段表单、媒体布局、slug 锁定、预览路由、发布暂存路径全部由适配器描述；核心负责安全、备份/原子写入、媒体处理与发布流水线。
+- 编辑界面由 manifest 自动渲染；特殊字段/视图可以用一个浏览器模块注册自定义组件。
+- 内置 `portfolio`（完整作品集）与 `landing`（最小单页示例，含自定义颜色字段与图片编辑器）。
+- 完整接口、字段类型与自定义组件说明：[docs/adapter-api.md](docs/adapter-api.md)。
+
+运行内置示例：
+
+```bash
+cd studio
+cp config.example.json config.json
+# 将 config.json 改为："adapter": "landing", "sitePath": "../examples/landing-site"
+npm start
+```
+
 ## 媒体规则
 
 - 图片：JPG / PNG / WebP → WebP，最长边 ≤ 1920px，≤ 2 MiB。
@@ -65,7 +87,7 @@ npm start
 1. 校验内容与媒体；
 2. 运行站点测试脚本（默认 `npm test`，可用 `production.testScript` 修改）；
 3. 检查 Git 分支、暂存区与远程（未配置远程时跳过远程检查）；
-4. 只暂存 `content/` 与 `media/`，提交并推送 `origin/<branch>`；
+4. 只暂存适配器声明的发布路径（默认 `content/` 与 `media/`），提交并推送 `origin/<branch>`；
 5. 可选：轮询 `production.url` 上的 JSON，确认部署已生效。
 
 `studio/config.json` 示例：
@@ -99,7 +121,21 @@ npm start
 
 ```bash
 npm test                # 站点检查
-cd studio && npm test   # 工作台检查
+cd studio && npm test   # 工作台检查（portfolio + landing 适配器）
+```
+
+## 目录
+
+```text
+content/ media/ assets/ *.html   站点模板（portfolio 适配器管理）
+tests/                           站点验收测试
+studio/server/                   工作台核心（HTTP、存储、媒体、发布）
+studio/server/adapters/          适配器契约与加载器
+studio/adapters/portfolio/       默认适配器（完整作品集）
+studio/adapters/landing/         最小示例适配器（含自定义组件）
+studio/web/                      manifest 驱动的通用界面
+examples/landing-site/           landing 示例站点
+docs/                            内容契约、适配器接口、生效逻辑
 ```
 
 ## 安全说明

@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Landing Page Demo</title>
+  <style>
+    :root { --accent: #f97316; --ink: #242529; --muted: #858991; --line: #e9e9ed; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #fff; color: var(--ink); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif; line-height: 1.7; }
+    main { max-width: 760px; margin: 0 auto; padding: 56px 20px 80px; }
+    .eyebrow { color: var(--accent); font-size: 11px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; margin: 0 0 8px; }
+    h1 { margin: 0; font-size: clamp(32px, 6vw, 48px); letter-spacing: -.04em; line-height: 1.15; }
+    h2 { margin: 0 0 6px; font-size: 20px; letter-spacing: -.02em; }
+    .subtitle { margin: 12px 0 0; color: var(--muted); font-size: 18px; }
+    .intro { margin: 18px 0 0; color: #55575c; }
+    section { margin-top: 36px; padding-top: 24px; border-top: 1px solid var(--line); }
+    section p { margin: 6px 0 0; color: #55575c; }
+    .images { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 36px; }
+    .images figure { margin: 0; border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
+    .images img { display: block; width: 100%; height: auto; }
+    .images figcaption { padding: 8px 12px; color: var(--muted); font-size: 12px; }
+    @media (max-width: 640px) { .images { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <main id="app">
+    <p>正在读取内容…</p>
+  </main>
+  <script>
+    (function () {
+      'use strict'
+      const app = document.getElementById('app')
+
+      function render(data) {
+        document.documentElement.style.setProperty('--accent', data.accent || '#f97316')
+        document.title = data.title || 'Landing Page Demo'
+        app.replaceChildren()
+
+        const eyebrow = document.createElement('p')
+        eyebrow.className = 'eyebrow'
+        eyebrow.textContent = 'LANDING ADAPTER EXAMPLE'
+        const title = document.createElement('h1')
+        title.textContent = data.title || ''
+        app.append(eyebrow, title)
+        if (data.subtitle) {
+          const subtitle = document.createElement('p')
+          subtitle.className = 'subtitle'
+          subtitle.textContent = data.subtitle
+          app.appendChild(subtitle)
+        }
+        if (data.intro) {
+          const intro = document.createElement('p')
+          intro.className = 'intro'
+          intro.textContent = data.intro
+          app.appendChild(intro)
+        }
+        for (const section of data.sections || []) {
+          const block = document.createElement('section')
+          const heading = document.createElement('h2')
+          heading.textContent = section.heading || ''
+          const body = document.createElement('p')
+          body.textContent = section.body || ''
+          block.append(heading, body)
+          app.appendChild(block)
+        }
+        const images = Array.isArray(data.images) ? data.images : []
+        if (images.length) {
+          const grid = document.createElement('div')
+          grid.className = 'images'
+          for (const image of images) {
+            const figure = document.createElement('figure')
+            const img = document.createElement('img')
+            img.src = image.src
+            img.alt = image.alt || ''
+            img.loading = 'lazy'
+            figure.appendChild(img)
+            if (image.caption) {
+              const caption = document.createElement('figcaption')
+              caption.textContent = image.caption
+              figure.appendChild(caption)
+            }
+            grid.appendChild(figure)
+          }
+          app.appendChild(grid)
+        }
+      }
+
+      fetch('content/landing.json', { cache: 'no-cache' })
+        .then((response) => {
+          if (!response.ok) throw new Error('HTTP ' + response.status)
+          return response.json()
+        })
+        .then(render)
+        .catch(() => {
+          app.replaceChildren()
+          const message = document.createElement('p')
+          message.textContent = '内容加载失败，请检查 content/landing.json。'
+          app.appendChild(message)
+        })
+    })()
+  </script>
+</body>
+</html>

@@ -32,9 +32,25 @@ media/projects/<slug>/   项目图片与视频
 media/profile/avatar.webp 本地头像
 tests/site.test.js       站点验收测试
 studio/                  本地工作台（只服务本机）
+studio/adapters/         适配器（portfolio 默认 + landing 示例）
+examples/landing-site/   landing 示例站点
+docs/                    内容契约、适配器接口与本报告
 ```
 
 站点的唯一数据源是 `content/` 与 `media/`。`assets/projects.js` 只是同源读取失败时的降级快照，不会在工作台发布时自动同步（正式站 fetch 成功时不会用到它）。
+
+### 适配器层
+
+工作台核心不假设站点结构：`studio/adapters/<id>/index.js` 用一个 `BaseAdapter` 声明：
+
+- **documents**：内容文件路径、对象/集合、标识字段、排序与状态字段；
+- **mediaCollections**：媒体目录、每条目目录或扁平目录、引用字段、格式与限额；
+- **avatar**：头像文件、目标 JSON 指针、尺寸；
+- **publish**：暂存路径、锁定来源、部署探测目标、提交前缀；
+- **manifest**：界面视图、表单字段、预览路由与帮助文案；
+- **validate**：该模板特有的结构与跨字段校验。
+
+核心按这些描述执行存储、备份、媒体处理、素材库、发布与通用 UI 渲染。`portfolio` 适配器对应本仓库模板；`landing` 适配器演示单文档 + 扁平图片集合 + 自定义前端组件。接口细节见 [adapter-api.md](adapter-api.md)。
 
 ## 3. 启动与配置
 
@@ -54,6 +70,7 @@ flowchart LR
 
 | 配置 | 默认 | 作用 |
 | --- | --- | --- |
+| `adapter` | `portfolio` | 选择站点适配器 |
 | `sitePath` | `..` | 被管理的站点仓库根 |
 | `port` | `3737` | 本地端口 |
 | `production.url` | `""` | 部署确认轮询地址；空则跳过 |
@@ -62,7 +79,7 @@ flowchart LR
 | `production.testScript` | `test` | 发布前运行的 npm 脚本 |
 | `production.deployCheck.enabled` | `false` | 是否轮询确认部署 |
 
-环境变量：`STUDIO_SITE_PATH`、`STUDIO_PORT`、`STUDIO_SITE_URL`、`STUDIO_GIT_REMOTE`、`STUDIO_GIT_BRANCH`。
+环境变量：`STUDIO_ADAPTER`、`STUDIO_SITE_PATH`、`STUDIO_PORT`、`STUDIO_SITE_URL`、`STUDIO_GIT_REMOTE`、`STUDIO_GIT_BRANCH`。
 
 ## 4. 编辑与保存（只改本地）
 
@@ -146,7 +163,7 @@ sequenceDiagram
 1. **校验**：字段结构、必填替代文本、媒体文件存在与体积、总量 ≤ 80 MiB、隐私规则（手机号、学号样式、简历文件、`javascript:` 等）、URL 协议。
 2. **测试**：通过当前 Node 自带的 `npm-cli.js` 执行 `npm run <testScript>`（默认 `test`），不经过 shell；失败会展示日志尾部且不提交。
 3. **Git 前置检查**：当前分支必须匹配；配置了 `expectedRemote` 时 `origin` 必须匹配；暂存区必须为空；有远程时先 `fetch` 并比较本地与 `origin/<branch>`。
-4. **暂存**：只执行 `git add -A -- content`，`media` 目录存在文件时追加 `media`；随后校验暂存路径全部位于 `content/` 或 `media/`。
+4. **暂存**：按适配器的 `stagePaths`（默认 `content` 与 `media`）执行 `git add -A`；随后校验暂存路径全部位于这些发布路径内。
 5. **提交**：消息形如 `content: 工作台内容更新 YYYY-MM-DD HH:mm`。
 6. **推送**：`git push origin <branch>`；失败时本地提交保留。
 7. **部署确认（可选）**：轮询 `${url}/content/site.json` 与 `projects.json`，规范化 JSON 后与本地比较；每 15 秒一次、最长 10 分钟。只允许 HTTPS、域名与配置一致，并拒绝解析到环回/私网/保留地址。
@@ -199,12 +216,13 @@ flowchart LR
 - 出站请求仅 HTTPS、仅配置域名、拒绝内网/环回解析、禁止重定向。
 - Git 调用不经过 shell；npm 通过 `npm-cli.js` 直接执行；不保存任何 Token。
 - 发布校验会拦截手机号、学号样式、简历文件链接与不安全协议。
+- 适配器是本地受信任代码，拥有与服务端相同的权限；加载器只接受本地登记过的适配器 id，不提供远程加载。
 
 ## 9. 验证情况
 
 - 站点测试：10 项（内容结构、媒体文件与限额、隐私扫描、路由与离线快照等）。
-- 工作台测试：37 项（保存/备份/原子写、slug 改名与锁定、图片/视频/头像处理、上传安全、发布流水线各失败分支）。
-- 冒烟：模板工作台启动、预览、发布前校验均通过。
+- 工作台测试：41 项（适配器契约与加载、manifest、保存/备份/原子写、slug 改名与锁定、图片/视频/头像处理、上传安全、发布流水线各失败分支，以及 landing 示例适配器的端到端发布）。
+- 冒烟：模板工作台启动、预览、发布前校验均通过；landing 适配器的内容、媒体与发布路径按描述生效。
 - 安全审计：2 条同一类启发式提示（文章接口地址来自 `site.json`，被视为浏览器端动态 URL）；代码已限制仅 HTTPS 并规范化地址，且该地址由站点所有者配置、无服务器端请求，属于需人工确认的提示项。
 
 ## 10. 一句话总结

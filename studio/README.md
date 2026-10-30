@@ -2,7 +2,7 @@
 
 管理本仓库（父目录）静态作品集站点的本地可视化工作台。它编辑 `content/site.json` 与 `content/projects.json`，用 sharp / FFmpeg 处理上传的媒体，预览真实页面，并把 `content/` + `media/` 提交推送到 Git。
 
-完整快速开始见[仓库根 README](../README.md)，JSON 字段契约见[内容结构文档](../docs/content-schema.md)，从编辑到线上生效的链路见[生效逻辑报告](../docs/how-it-works.md)。
+完整快速开始见[仓库根 README](../README.md)，JSON 字段契约见[内容结构文档](../docs/content-schema.md)，适配器接口见[适配器文档](../docs/adapter-api.md)，从编辑到线上生效的链路见[生效逻辑报告](../docs/how-it-works.md)。
 
 ## 环境要求
 
@@ -21,10 +21,17 @@ npm start
 
 服务只绑定 `127.0.0.1`。`config.json` 已被 Git 忽略。
 
+## 适配器
+
+工作台核心是通用的：站点结构（内容文档、媒体布局、头像、发布范围、编辑界面）由适配器声明。默认 `portfolio`，内置 `landing` 最小示例；通过 `config.json` 的 `adapter` 选择，环境变量 `STUDIO_ADAPTER` 可覆盖。
+
+新增适配器：在 `studio/adapters/<id>/index.js` 实现 `BaseAdapter`（或满足同样接口），并在 `studio/server/adapters/loader.js` 的 `switch` 中登记。适配器是本地受信任代码。完整契约、字段类型与自定义组件见 [docs/adapter-api.md](../docs/adapter-api.md)。
+
 ## 配置
 
 ```json
 {
+  "adapter": "portfolio",
   "sitePath": "..",
   "port": 3737,
   "production": {
@@ -39,6 +46,7 @@ npm start
 
 | 字段 | 说明 |
 | --- | --- |
+| `adapter` | 适配器 id，默认 `portfolio` |
 | `sitePath` | 站点仓库根目录，默认 `..`（当前仓库根） |
 | `port` | 本地端口，默认 3737 |
 | `production.expectedRemote` | 期望的 `origin` 地址；留空则跳过远程校验 |
@@ -46,7 +54,7 @@ npm start
 | `production.testScript` | 发布前运行的 npm 脚本，默认 `test` |
 | `production.url` + `deployCheck.enabled` | 推送后轮询 `${url}/content/site.json` 与 `/content/projects.json` 确认部署；`url` 留空则跳过 |
 
-环境变量覆盖：`STUDIO_SITE_PATH`、`STUDIO_PORT`、`STUDIO_SITE_URL`、`STUDIO_GIT_REMOTE`、`STUDIO_GIT_BRANCH`。
+环境变量覆盖：`STUDIO_ADAPTER`、`STUDIO_SITE_PATH`、`STUDIO_PORT`、`STUDIO_SITE_URL`、`STUDIO_GIT_REMOTE`、`STUDIO_GIT_BRANCH`。
 
 ## 功能
 
@@ -77,7 +85,7 @@ npm start
 npm test
 ```
 
-覆盖：内容校验、备份与原子写入、slug 改名与锁定、图片/视频处理、上传安全（Host / Origin / 令牌 / 路径 / 魔数）、发布流水线（暂存范围、分叉、测试失败、推送拒绝、部署超时、并发发布）。
+覆盖：适配器契约与加载、manifest 导航/表单渲染、内容校验、备份与原子写入、slug 改名与锁定、图片/视频处理、上传安全（Host / Origin / 令牌 / 路径 / 魔数）、发布流水线（暂存范围、分叉、测试失败、推送拒绝、部署超时、并发发布），以及 landing 示例适配器的端到端流程。
 
 ## 安全模型
 

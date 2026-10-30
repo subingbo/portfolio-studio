@@ -66,12 +66,16 @@ function createGit(config) {
       const [ahead, behind] = stdout.trim().split(/\s+/).map(Number)
       return { ahead: Number.isFinite(ahead) ? ahead : 0, behind: Number.isFinite(behind) ? behind : 0 }
     },
-    async addContent() {
-      const targets = ['content']
-      const mediaDir = path.join(cwd, 'media')
-      if (fs.existsSync(mediaDir) && directoryHasFiles(mediaDir)) {
-        targets.push('media')
+    async addContent(stagePaths) {
+      const targets = []
+      for (const relative of stagePaths || []) {
+        const absolute = path.join(cwd, relative)
+        if (!fs.existsSync(absolute)) continue
+        if (fs.statSync(absolute).isFile() || directoryHasFiles(absolute)) {
+          targets.push(relative)
+        }
       }
+      if (!targets.length) return
       await git(['add', '-A', '--', ...targets])
     },
     async commit(message) {

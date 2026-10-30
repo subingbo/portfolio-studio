@@ -1,15 +1,18 @@
 'use strict'
 
+// 本地内容工作台：适配器驱动的 HTTP 服务。
+
 const fs = require('node:fs')
 const http = require('node:http')
 const path = require('node:path')
-const { loadConfig } = require('./config')
+const { loadConfig, resolveInside } = require('./config')
 const { createState } = require('./state')
-const { createContentStore } = require('./content')
+const { loadAdapter } = require('./adapters/loader')
+const { createDocumentStore } = require('./content')
 const { createMediaStore } = require('./media')
 const { createAvatarStore } = require('./avatar')
 const { createPublisher } = require('./publish')
-const { validateContent } = require('./validate')
+const { validateDocuments } = require('./validate')
 const { checkFfmpeg } = require('./videos')
 
 const MIME_TYPES = {
@@ -19,10 +22,18 @@ const MIME_TYPES = {
   '.json': 'application/json; charset=utf-8',
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.avif': 'image/avif',
   '.webp': 'image/webp',
   '.mp4': 'video/mp4',
+  '.webm': 'video/webm',
+  '.mov': 'video/quicktime',
   '.ico': 'image/x-icon',
   '.txt': 'text/plain; charset=utf-8',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
   '.map': 'application/json; charset=utf-8',
 }
 
@@ -197,23 +208,32 @@ function sendFile(response, absolutePath, options = {}) {
 
 function createServer(options = {}) {
   const config = loadConfig(options.config || {})
-  if (!fs.existsSync(config.paths.siteProjectsFile) || !fs.existsSync(config.paths.siteSiteFile)) {
-    throw new Error(
-      '找不到站点内容文件：' + config.paths.siteContent +
-      '（请在 studio 目录复制 config.example.json 为 config.json，并检查 sitePath）'
-    )
+  const { adapter, directory: adapterDirectory } = loadAdapter(config)
+  for (const doc of adapter.documents) {
+    const file = resolveInside(config.sitePath, doc.file)
+    if (!fs.existsSync(file)) {
+      throw new Error(
+        '找不到内容文件：' + doc.file +
+        '（请检查适配器 ' + adapter.id + ' 与 config.json 的 sitePath）'
+      )
+    }
   }
   const state = createState(config)
-  const contentStore = createContentStore(config, state)
-  const mediaStore = createMediaStore(config, contentStore)
-  const avatarStore = createAvatarStore(config, contentStore)
-  const publisher = createPublisher(config, state, contentStore, options.publisher || {})
+  const contentStore = createDocumentStore(config, state, adapter)
+  const mediaStore = createMediaStore(config, contentStore, adapter)
+  const avatarStore = createAvatarStore(config, contentStore, adapter)
+  const publisher = createPublisher(config, state, contentStore, adapter, options.publisher || {})
   const webRoot = config.paths.web
   const siteRoot = config.sitePath
   const studioFiles = new Map([
     ['/index.html', path.join(webRoot, 'index.html')],
     ['/studio.css', path.join(webRoot, 'studio.css')],
-    ['/studio.js', path.join(webRoot, 'studio.js')],
+    ['/core.js', path.join(webRoot, 'core.js')],
+    ['/components.js', path.join(webRoot, 'components.js')],
+    ['/renderer-document.js', path.join(webRoot, 'renderer-document.js')],
+    ['/renderer-collection.js', path.join(webRoot, 'renderer-collection.js')],
+    ['/renderer-media.js', path.join(webRoot, 'renderer-media.js')],
+    ['/renderer-publish.js', path.join(webRoot, 'renderer-publish.js')],
   ])
   let activePort = config.port
 
@@ -278,46 +298,78 @@ function createServer(options = {}) {
           url: config.production.url,
           branch: config.production.branch,
         },
+        adapter: {
+          id: adapter.id,
+          name: adapter.name,
+          version: adapter.version,
+          apiVersion: adapter.apiVersion,
+          webModule: adapter.webModule || null,
+        },
+        manifest: adapter.manifest,
+        capabilities: {
+          avatar: adapter.avatar
+            ? {
+              document: adapter.avatar.document,
+              pointer: adapter.avatar.pointer,
+              file: adapter.avatar.file,
+              size: adapter.avatar.size,
+              maxBytes: adapter.avatar.maxBytes,
+            }
+            : null,
+          media: adapter.mediaCollections.map((collection) => ({
+            id: collection.id,
+            label: collection.label,
+            mode: collection.mode,
+            dirKey: collection.dirKey || null,
+            root: collection.root,
+            mediaField: collection.mediaField || null,
+            coverField: collection.cover ? collection.cover.field : null,
+          })),
+        },
+        documents: adapter.documents.map((doc) => ({
+          id: doc.id,
+          kind: doc.kind,
+          label: doc.label,
+          itemsKey: doc.itemsKey || null,
+          identityField: doc.identityField || null,
+          orderField: doc.orderField || null,
+          statusField: doc.statusField || null,
+          statuses: doc.statuses || [],
+        })),
       })
       return
     }
 
-    if (pathname === '/api/content/site' && method === 'GET') {
-      sendJson(response, 200, { data: await contentStore.readSite() })
-      return
-    }
-
-    if (pathname === '/api/content/site' && method === 'PUT') {
-      const body = await readJsonBody(request)
-      const site = body && body.data ? body.data : body
-      const result = await contentStore.saveSite(site)
-      sendJson(response, result.ok ? 200 : 400, result)
-      return
-    }
-
-    if (pathname === '/api/content/projects' && method === 'GET') {
-      sendJson(response, 200, { data: await contentStore.readProjects() })
-      return
-    }
-
-    if (pathname === '/api/content/projects' && method === 'PUT') {
+    const contentMatch = pathname.match(/^\/api\/content\/([a-z0-9-]+)$/)
+    if (contentMatch && (method === 'GET' || method === 'PUT')) {
+      const documentId = contentMatch[1]
+      if (!adapter.documents.some((doc) => doc.id === documentId)) {
+        sendJson(response, 404, { error: 'UNKNOWN_DOCUMENT', message: '未知内容文档：' + documentId })
+        return
+      }
+      if (method === 'GET') {
+        sendJson(response, 200, { data: await contentStore.readDocument(documentId) })
+        return
+      }
       const body = await readJsonBody(request)
       const data = body && body.data ? body.data : body
       const renames = Array.isArray(body.renames) ? body.renames : []
-      const result = await contentStore.saveProjects(data, renames)
+      const result = await contentStore.saveDocument(documentId, data, { renames })
       sendJson(response, result.ok ? 200 : 400, result)
       return
     }
 
     if (pathname === '/api/media' && method === 'POST') {
-      // 第一步：建立绑定项目的会话，把请求体写入会话文件句柄（不拼接路径）。
-      const requestedSlug = String(url.searchParams.get('project') || '')
+      // 第一步：建立绑定媒体集合/条目的会话，把请求体写入会话文件句柄（不拼接路径）。
+      const requestedCollection = String(url.searchParams.get('collection') || '')
+      const requestedItem = String(url.searchParams.get('item') || url.searchParams.get('project') || '')
       const requestedKind = String(url.searchParams.get('kind') || '')
       const contentLength = Number(request.headers['content-length'] || 0)
       let session = null
       try {
         session = await mediaStore.createUploadSession({
-          requestedSlug,
+          collectionId: requestedCollection,
+          itemKey: requestedItem,
           kind: requestedKind,
           contentLength,
         })
@@ -376,25 +428,29 @@ function createServer(options = {}) {
     }
 
     if (pathname === '/api/media' && method === 'GET') {
-      sendJson(response, 200, await mediaStore.list())
+      sendJson(response, 200, await mediaStore.list(url.searchParams.get('collection') || ''))
       return
     }
 
     if (pathname === '/api/media/remove' && method === 'POST') {
       const body = await readJsonBody(request)
-      const result = await mediaStore.removeReference(String(body.project || ''), String(body.mediaId || ''))
+      const result = await mediaStore.removeReference({
+        collectionId: String(body.collection || ''),
+        itemKey: String(body.item || body.project || ''),
+        mediaId: String(body.mediaId || ''),
+      })
       sendJson(response, result.ok ? 200 : 400, result)
       return
     }
 
     if (pathname === '/api/media/cleanup' && method === 'POST') {
-      sendJson(response, 200, await mediaStore.cleanupCandidates())
+      sendJson(response, 200, await mediaStore.cleanupCandidates(url.searchParams.get('collection') || ''))
       return
     }
 
     if (pathname === '/api/media/cleanup/confirm' && method === 'POST') {
       const body = await readJsonBody(request)
-      sendJson(response, 200, await mediaStore.deleteFiles(body.files))
+      sendJson(response, 200, await mediaStore.deleteFiles(String(body.collection || ''), body.files))
       return
     }
 
@@ -433,9 +489,9 @@ function createServer(options = {}) {
     }
 
     if (pathname === '/api/validate' && method === 'POST') {
-      const result = validateContent({
-        site: await contentStore.readSite(),
-        projects: await contentStore.readProjects(),
+      const result = validateDocuments({
+        adapter,
+        documents: await contentStore.readAll(),
         config,
         mode: 'publish',
       })
@@ -458,6 +514,16 @@ function createServer(options = {}) {
       return
     }
 
+    if (pathname.startsWith('/adapter-web/')) {
+      const name = pathname.slice('/adapter-web/'.length)
+      if (!adapter.webModule || name !== adapter.webModule) {
+        sendJson(response, 404, { error: 'NOT_FOUND', message: '适配器没有提供该前端模块' })
+        return
+      }
+      sendFile(response, resolveInside(adapterDirectory, name), { head: method === 'HEAD', csp: true })
+      return
+    }
+
     if (pathname === '/preview' || pathname.startsWith('/preview/')) {
       const relative = pathname === '/preview' ? '/' : pathname.slice('/preview'.length)
       const previewFile = lookupIndexedFile(buildFileIndex(siteRoot), relative)
@@ -477,7 +543,7 @@ function createServer(options = {}) {
     sendFile(response, studioFile, { head: method === 'HEAD', csp: true })
   }
 
-  return { server, config, state, publisher, contentStore, mediaStore, avatarStore }
+  return { server, config, state, adapter, publisher, contentStore, mediaStore, avatarStore }
 }
 
 function start() {
@@ -487,6 +553,7 @@ function start() {
     const port = address && typeof address === 'object' ? address.port : app.config.port
     console.log('内容工作台已启动')
     console.log('  地址：http://127.0.0.1:' + port + '（或 http://localhost:' + port + '）')
+    console.log('  适配器：' + app.adapter.name + '（' + app.adapter.id + '）')
     console.log('  站点：' + app.config.sitePath)
     console.log('  发布目标：' + (app.config.production.url || '未配置部署地址（部署确认关闭）'))
     if (!fs.existsSync(path.join(app.config.studioRoot, 'config.json'))) {

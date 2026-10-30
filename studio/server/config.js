@@ -44,9 +44,11 @@ function loadConfig(overrides = {}) {
     root,
     overrides.sitePath || process.env.STUDIO_SITE_PATH || fileConfig.sitePath || '..'
   )
+  const adapter = String(overrides.adapter || process.env.STUDIO_ADAPTER || fileConfig.adapter || 'portfolio')
   return {
     studioRoot: root,
     sitePath,
+    adapter,
     port: Number(overrides.port || process.env.STUDIO_PORT || fileConfig.port || 3737),
     production,
     limits: Object.assign(

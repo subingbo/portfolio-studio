@@ -156,6 +156,17 @@ a { color: var(--orange-deep); }
 .avatar-info { min-width: 0; }
 .avatar-info p { margin: 0 0 8px; }
 .avatar-status { margin: 6px 0 0; }
+.stack-list { margin-top: 8px; }
+.media-manager { margin-top: 6px; }
+.cleanup-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+}
+.cleanup-row input { width: auto; }
 
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }

@@ -1,0 +1,10 @@
+{
+  "name": "landing-site-example",
+  "private": true,
+  "type": "commonjs",
+  "description": "Minimal site managed by the landing adapter example",
+  "license": "MIT",
+  "scripts": {
+    "test": "node --test tests/*.test.js"
+  }
+}
